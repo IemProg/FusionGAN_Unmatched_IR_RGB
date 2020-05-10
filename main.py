@@ -14,20 +14,17 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 
-import Generator
-import Discriminator
+import GeneratorOne, GeneratorTwo
+import DiscriminatorOne, DiscriminatorTwo
 
 checkpoint_path = "./model_checkpoints/"
 
-batch_size = 4
+batch_size = 32
 epochs = 10
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 learning_rate = 0.01
 learning_rate_generator = 3e-4
 learning_rate_discriminator = 0.1
-alpha = 8
-beta = 0.001
-
 
 #####################################################
 ##				DATASET SETTING					   ##
@@ -50,50 +47,24 @@ train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True
 #####################################################
 ##				MODEL PROTOTYPE					   ##
 #####################################################
-# 3x3 convolution
-def conv3x3(in_channels, out_channels, stride=1):
-    return nn.Conv2d(in_channels, out_channels, kernel_size=3, 
-                     stride=stride, padding=1, bias=False)
+#Generators & Discriminators
+generator_one = GeneratorOne()
+generator_two = GeneratorTwo()
 
-# Residual block
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, downsample=None):
-        super(ResidualBlock, self).__init__()
-        self.conv1 = conv3x3(in_channels, out_channels, stride)
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(out_channels, out_channels)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-        self.downsample = downsample
-        
-    def forward(self, x):
-#         if torch.cuda.is_available():
-#             x = torch.cuda.FloatTensor(x)
-        residual = x
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-        out = self.conv2(out)
-        out = self.bn2(out)
-        if self.downsample:
-            residual = self.downsample(x)
-        out += residual
-        out = self.relu(out)
-        return out
+discriminator_one = DiscriminatorOne()
+discriminator_two = DiscriminatorTwo()
 
-#Generator & Discriminator
-generator = Generator(ResidualBlock)
-discriminator = Discriminator(3)
+discriminator_one = discriminator_one.to(device)
+generagenerator_Two = generator.to(device)
 
-generator = generator.to(device)
-discriminator = discriminator.to(device)
-
+#TO-DO: 1\ Intial Weights
 
 #Optimizers
-optimizer_gen = optim.SGD(generator.parameters(), lr = learning_rate_generator, momentum=0.9)
-optimizer_disc = optim.SGD(discriminator.parameters(), lr = learning_rate_discriminator, momentum=0.9)
+g_optimizer = Adam(generator_one.parameters(), lr=learning_rate, betas=(0.5, 0.999))
+d_optimizer = Adam(discriminator_one.parameters(), lr=learning_rate , betas=(0.5, 0.999))
 
-def lossIdentity(real_pair, fake_pair):
+def lossG1(real_pair, fake_pair):
+
     batch_size = real_pair.size()[0]
     real_pair = 1 - real_pair
     real_pair = real_pair ** 2
@@ -102,26 +73,46 @@ def lossIdentity(real_pair, fake_pair):
     fake_pair = torch.sum(fake_pair)
     return (real_pair + fake_pair) / batch_size
 
-def lossShape(x, y):
-    batch_size = x.size()[0]
-    diff = x - y
-    diff = diff ** 2
-    diff = torch.sum(diff) / batch_size
-    return diff
+def lossG2(real_pair, fake_pair):
+    batch_size = real_pair.size()[0]
+    real_pair = 1 - real_pair
+    real_pair = real_pair ** 2
+    fake_pair  = fake_pair ** 2
+    real_pair = torch.sum(real_pair)
+    fake_pair = torch.sum(fake_pair)
+    return (real_pair + fake_pair) / batch_size
 
+def lossD1(real_pair, fake_pair):
+    batch_size = real_pair.size()[0]
+    real_pair = 1 - real_pair
+    real_pair = real_pair ** 2
+    fake_pair  = fake_pair ** 2
+    real_pair = torch.sum(real_pair)
+    fake_pair = torch.sum(fake_pair)
+    return (real_pair + fake_pair) / batch_size
+
+def lossD2(real_pair, fake_pair):
+    batch_size = real_pair.size()[0]
+    real_pair = 1 - real_pair
+    real_pair = real_pair ** 2
+    fake_pair  = fake_pair ** 2
+    real_pair = torch.sum(real_pair)
+    fake_pair = torch.sum(fake_pair)
+    return (real_pair + fake_pair) / batch_size
+
+def loss_model():
+    return None
 
 #####################################################
 ##				MODEL TRAINING					   ##
 #####################################################
-
-
 def save_checkpoint(state, dirpath, epoch):
     filename = 'checkpoint-{}.ckpt'.format(epoch)
     checkpoint_path = os.path.join(dirpath, filename)
     torch.save(state, checkpoint_path)
     print('--- checkpoint saved to ' + str(checkpoint_path) + ' ---')
 
-def train_model(gen, disc, loss_i, loss_s, optimizer_gen, optimizer_disc, alpha = 1, beta = 1, num_epochs = 10):
+def train_model(gen1, gen2, disc1, disc2, loss_s, optimizer_gen, optimizer_disc, num_epochs = 10):
     for epoch in range(num_epochs):
         print("Epoch {}/{}".format(epoch, num_epochs - 1))
         print('-'*10)
@@ -225,4 +216,4 @@ def train_model(gen, disc, loss_i, loss_s, optimizer_gen, optimizer_disc, alpha 
     return gen, disc
 
 #Run
-generator, discriminator = train_model(generator, discriminator, lossIdentity, lossShape, optimizer_gen, optimizer_disc, alpha=alpha, beta=beta, num_epochs = epochs)
+G1, G2, D1, D2 = train_model(generator_one, generator_two, discriminator_one, discriminator_two, loss_model, g_optimizer, d_optimizer, num_epochs = epochs)
